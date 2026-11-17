@@ -3,103 +3,130 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Porto Verde — Open-World Crime Game</title>
+<meta name="description" content="DUSTHAVEN — a 3D open-world crime game in the browser: drive, steal, outrun the law and run jobs in a desert-edge city at golden hour.">
+<title>DUSTHAVEN — Golden Hour in a Desert-Edge City</title>
 <style>
-  html, body { margin: 0; padding: 0; overflow: hidden; background: #0a0f14; font-family: Arial, Helvetica, sans-serif; }
-  #game-canvas { position: fixed; inset: 0; }
-  #game-canvas canvas { display: block; }
-  .hud { position: fixed; z-index: 10; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8); user-select: none; pointer-events: none; }
-  #top-left { top: 16px; left: 16px; }
-  #health-bar { width: 220px; height: 14px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.5); border-radius: 3px; overflow: hidden; }
-  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37d67a, #7be495); }
-  #health-text { font-size: 12px; margin-top: 2px; }
-  #money { font-size: 26px; font-weight: bold; color: #7dff9a; margin-top: 6px; }
-  #stars { font-size: 28px; letter-spacing: 2px; margin-top: 2px; }
-  #minimap-wrap { position: fixed; left: 16px; bottom: 16px; z-index: 10; }
-  #minimap { border-radius: 50%; border: 2px solid rgba(255,255,255,.6); background: #0e2a1a; box-shadow: 0 0 12px rgba(0,0,0,.6); }
-  #objective-box { position: fixed; left: 210px; bottom: 16px; z-index: 10; background: rgba(0,0,0,.55); border-left: 4px solid #ffd23e; padding: 10px 14px; max-width: 460px; border-radius: 4px; color: #fff; }
-  #objective-title { font-weight: bold; color: #ffd23e; font-size: 14px; letter-spacing: 1px; }
-  #objective { font-size: 15px; margin-top: 3px; }
-  #speed-box { position: fixed; right: 20px; bottom: 16px; z-index: 10; text-align: right; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
-  #speed { font-size: 44px; font-weight: bold; line-height: 1; }
-  #speed-unit { font-size: 13px; color: #ddd; }
-  #ammo { margin-top: 4px; font-size: 14px; color: #ffe9a8; }
-  #banner { position: fixed; top: 22%; left: 50%; transform: translateX(-50%); z-index: 11; font-size: 34px; font-weight: bold; color: #ffd23e; text-shadow: 0 2px 8px rgba(0,0,0,.9); opacity: 0; transition: opacity .4s; text-align: center; white-space: nowrap; }
-  #subtitle { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); z-index: 11; font-size: 19px; color: #fff; background: rgba(0,0,0,.6); padding: 8px 18px; border-radius: 4px; opacity: 0; transition: opacity .4s; max-width: 80%; text-align: center; }
-  #crosshair { position: fixed; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; z-index: 10; display: none; }
-  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 3px #000; }
-  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
-  #crosshair::after { top: 10px; left: 0; width: 22px; height: 2px; }
-  #damage-flash { position: fixed; inset: 0; z-index: 9; background: radial-gradient(ellipse at center, transparent 55%, rgba(255,0,0,.55) 100%); opacity: 0; pointer-events: none; }
-  .overlay { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(160deg, rgba(10,20,40,.88), rgba(60,20,60,.82)); color: #fff; text-align: center; }
-  .overlay h1 { font-size: 64px; margin: 0; letter-spacing: 4px; color: #ffd23e; text-shadow: 0 4px 18px rgba(0,0,0,.8); }
-  .overlay h2 { font-size: 20px; font-weight: normal; color: #cfe8ff; margin: 8px 0 24px; }
-  .overlay .controls { font-size: 15px; line-height: 1.9; color: #eee; background: rgba(0,0,0,.4); padding: 14px 28px; border-radius: 8px; margin-bottom: 26px; }
-  .overlay button { pointer-events: auto; cursor: pointer; font-size: 20px; padding: 12px 34px; margin: 6px; border: none; border-radius: 6px; background: #ffd23e; color: #222; font-weight: bold; }
-  .overlay button:hover { background: #ffe27a; }
-  .overlay button.secondary { background: #2e6fd8; color: #fff; }
-  #pause, #end-screen { display: none; }
-  #toast { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 12; font-size: 15px; color: #ffe9a8; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #1c1410; font-family: 'Segoe UI', Arial, sans-serif; color: #f5e6c8; }
+  #game { position: fixed; inset: 0; }
+  #game canvas { display: block; }
+  #errlog { position: fixed; left: 4px; bottom: 2px; font-size: 10px; color: #f66;
+    z-index: 60; pointer-events: none; max-width: 90vw; }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; display: none; }
+  #topleft { position: absolute; top: 14px; left: 16px; text-shadow: 0 2px 4px rgba(0,0,0,.7); }
+  #stars { font-size: 30px; letter-spacing: 4px; color: #ffd76a; }
+  #stars.hot { color: #ff5533; animation: blink .5s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+  #money { font-size: 26px; font-weight: 800; color: #7dff8a; }
+  #healthbar { width: 190px; height: 12px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.5); border-radius: 6px; margin-top: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#ff5533,#ffb347); }
+  #speed { font-size: 20px; font-weight: 700; margin-top: 6px; }
+  #ammo { font-size: 14px; opacity: .9; margin-top: 2px; }
+  #minimap { position: absolute; top: 14px; right: 16px; width: 190px; height: 190px;
+    border-radius: 50%; box-shadow: 0 0 0 3px rgba(255,194,51,.85), 0 4px 18px rgba(0,0,0,.6); }
+  #objective { position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    background: rgba(20,12,6,.72); border: 1px solid rgba(255,194,51,.7); border-radius: 8px;
+    padding: 8px 18px; font-size: 16px; font-weight: 700; max-width: 46vw; text-align: center; }
+  #timer { position: absolute; top: 64px; left: 50%; transform: translateX(-50%);
+    font-size: 22px; font-weight: 800; color: #ffdd66; text-shadow: 0 2px 4px rgba(0,0,0,.8); display: none; }
+  #hint { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+    font-size: 14px; background: rgba(0,0,0,.55); padding: 6px 14px; border-radius: 6px; }
+  #toast { position: absolute; bottom: 58px; left: 50%; transform: translateX(-50%);
+    font-size: 15px; font-weight: 700; background: rgba(20,12,6,.8); border: 1px solid #ffc233;
+    padding: 7px 16px; border-radius: 6px; display: none; }
+  #dialogue { position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+    width: min(620px, 80vw); background: rgba(12,8,4,.82); border-left: 4px solid #ffc233;
+    border-radius: 6px; padding: 10px 16px; display: none; }
+  #dialogue-name { font-weight: 800; color: #ffc233; font-size: 14px; }
+  #dialogue-text { font-size: 16px; margin-top: 2px; }
+  #banner { position: absolute; top: 26%; left: 50%; transform: translateX(-50%);
+    text-align: center; display: none; text-shadow: 0 3px 8px rgba(0,0,0,.8); }
+  #banner-title { font-size: 52px; font-weight: 900; letter-spacing: 3px; color: #ffc233; }
+  #banner-sub { font-size: 19px; margin-top: 4px; }
+  #banner.pop #banner-title { animation: pop .45s ease-out; }
+  @keyframes pop { from { transform: scale(.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  /* Menus */
+  .screen { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: linear-gradient(180deg, rgba(60,20,0,.55), rgba(20,8,0,.78)); }
+  .screen h1 { font-size: 84px; margin: 0; letter-spacing: 10px; color: #ffc233;
+    text-shadow: 0 4px 0 #7a3a00, 0 8px 24px rgba(0,0,0,.8); }
+  .screen h2 { font-size: 20px; font-weight: 400; margin: 6px 0 26px; color: #ffe9b0; }
+  .screen p { max-width: 640px; line-height: 1.55; font-size: 15px; color: #f5e6c8; }
+  .screen button { pointer-events: auto; cursor: pointer; font-size: 19px; font-weight: 800;
+    padding: 12px 34px; margin: 6px; border-radius: 8px; border: 2px solid #ffc233;
+    background: #2a1608; color: #ffc233; }
+  .screen button:hover { background: #ffc233; color: #2a1608; }
+  .keys { font-size: 13px; opacity: .85; margin-top: 18px; line-height: 1.8; }
+  #pause { display: none; }
+  #pause-title { font-size: 64px; }
 </style>
 </head>
 <body>
-<div id="game-canvas"></div>
-<div id="damage-flash"></div>
+<div id="game"></div>
 
-<div class="hud" id="top-left">
-  <div id="health-bar"><div id="health-fill"></div></div>
-  <div id="health-text">100 HP</div>
-  <div id="money">$250</div>
-  <div id="stars">☆☆☆☆☆</div>
-</div>
-<div id="minimap-wrap"><canvas id="minimap" width="180" height="180"></canvas></div>
-<div id="objective-box"><div id="objective-title">PORTO VERDE</div><div id="objective">Free roam</div></div>
-<div id="speed-box"><div id="speed">0</div><div id="speed-unit">ON FOOT</div><div id="ammo"></div></div>
-<div id="banner"></div>
-<div id="subtitle"></div>
-<div id="crosshair"></div>
-<div id="toast"></div>
-
-<div class="overlay" id="menu">
-  <h1>PORTO VERDE</h1>
-  <h2>An open-world crime game — sun, sand, speed and the PD on your tail.</h2>
-  <div class="controls">
-    <b>W A S D</b> move / drive &nbsp;·&nbsp; <b>Shift</b> sprint &nbsp;·&nbsp; <b>E</b> steal / exit car<br>
-    <b>Mouse click</b> shoot pistol &nbsp;·&nbsp; <b>R</b> reload &nbsp;·&nbsp; <b>F</b> melee &nbsp;·&nbsp; <b>Space</b> handbrake<br>
-    <b>N</b> next mission &nbsp;·&nbsp; <b>P / Esc</b> pause &nbsp;·&nbsp; <b>M</b> mute<br>
-    Five story missions for fixer Marla Quinn · 10 hidden stashes · Courier Rush side job
+<div id="hud">
+  <div id="topleft">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="money">$250</div>
+    <div id="healthbar"><div id="health-fill"></div></div>
+    <div id="speed">ON FOOT</div>
+    <div id="ammo">PISTOL 12 / 48</div>
   </div>
-  <button id="btn-new">NEW GAME</button>
-  <button id="btn-continue" class="secondary" style="display:none">CONTINUE</button>
+  <canvas id="minimap" width="190" height="190"></canvas>
+  <div id="objective">◆ Welcome to Dusthaven</div>
+  <div id="timer"></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="dialogue"><div id="dialogue-name"></div><div id="dialogue-text"></div></div>
+  <div id="toast"></div>
+  <div id="hint"></div>
 </div>
 
-<div class="overlay" id="pause">
-  <h1>PAUSED</h1>
-  <h2>Porto Verde waits for no one — except now.</h2>
-  <button id="btn-resume">RESUME</button>
-  <button id="btn-restart" class="secondary">RESTART</button>
-  <button id="btn-menu" class="secondary">MAIN MENU</button>
+<div id="menu" class="screen">
+  <h1>DUSTHAVEN</h1>
+  <h2>A desert-edge city at golden hour — drive it, steal it, survive it.</h2>
+  <p>You are Jet Calloway, a newcomer driver in Dusthaven. Run jobs for the fixer
+  Delia Voss, outrun the sheriff, dodge the Rust Vultures, and make the sunset yours.
+  Five story missions, timed deliveries, a stunt ramp and ten sun coins are waiting.</p>
+  <div>
+    <button id="btn-new">NEW GAME</button>
+    <button id="btn-continue">CONTINUE</button>
+  </div>
+  <div class="keys">
+    WASD / Arrows — drive &amp; walk &nbsp;·&nbsp; E — enter / leave car &nbsp;·&nbsp; Space — handbrake<br>
+    Mouse click — shoot &nbsp;·&nbsp; F — punch &nbsp;·&nbsp; 1 / 2 — fists / pistol &nbsp;·&nbsp; R — reload<br>
+    Esc — pause &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; Radio K-DUST 101.3 plays while you drive
+  </div>
 </div>
 
-<div class="overlay" id="end-screen">
-  <h1 id="end-title">BUSTED</h1>
-  <h2 id="end-text"></h2>
-  <button id="btn-end-retry">BACK ON THE STREETS</button>
-  <button id="btn-end-menu" class="secondary">MAIN MENU</button>
+<div id="pause" class="screen">
+  <h1 id="pause-title">PAUSED</h1>
+  <h2 id="pause-sub">Take a breath. The city waits.</h2>
+  <div>
+    <button id="btn-resume">RESUME</button>
+    <button id="btn-restart">RESTART</button>
+    <button id="btn-quit">SAVE &amp; MENU</button>
+  </div>
 </div>
+
+<div id="errlog"></div>
 
 <script src="vendor/three.min.js"></script>
 <script src="src/util.js"></script>
 <script src="src/input.js"></script>
 <script src="src/audio.js"></script>
 <script src="src/save.js"></script>
+<script src="src/effects.js"></script>
 <script src="src/city.js"></script>
 <script src="src/vehicles.js"></script>
-<script src="src/pedestrians.js"></script>
-<script src="src/effects.js"></script>
 <script src="src/player.js"></script>
-<script src="src/combat.js"></script>
+<script src="src/pedestrians.js"></script>
 <script src="src/police.js"></script>
+<script src="src/combat.js"></script>
 <script src="src/missions.js"></script>
 <script src="src/hud.js"></script>
 <script src="src/main.js"></script>

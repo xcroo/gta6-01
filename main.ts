@@ -1,24 +1,50 @@
-// main.ts — Porto Verde entrypoint: copies game/ and screenshots/ to the
-// output directory and writes /output/dossier.json with buildDossier.
-// Node 22 standard library only; deterministic: the same input writes the
-// same bytes on every run. It only creates the output directory, never
-// deletes it (the grader runs as uid 65534 and cannot delete /output).
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Dusthaven — main.ts (the entrypoint)
+// Copies game/ and screenshots/ from this repository into the output
+// directory and writes /output/dossier.json with buildDossier from
+// vendor/makefun-game.ts. Node standard library only, no network, no
+// timestamps and no randomness: two runs write byte-identical output.
+// The output directory itself is only created, never removed, because
+// the grader runs as a user that cannot delete it.
 import { buildDossier } from './vendor/makefun-game.ts';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-const outDir = process.env.MAKEFUN_OUTPUT_DIR || '/output';
-const rootDir = new URL('.', import.meta.url).pathname;
+const OUT_DIR = process.env.MAKEFUN_OUTPUT_DIR || '/output';
+const REPO_DIR = new URL('.', import.meta.url).pathname;
 
-mkdirSync(outDir, { recursive: true });
-cpSync(join(rootDir, 'game'), join(outDir, 'game'), { recursive: true });
-cpSync(join(rootDir, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
+function copyTree(srcDir: string, dstDir: string): void {
+  mkdirSync(dstDir, { recursive: true });
+  const entries = readdirSync(srcDir).sort();
+  for (const name of entries) {
+    const src = join(srcDir, name);
+    const dst = join(dstDir, name);
+    const st = statSync(src);
+    if (st.isDirectory()) {
+      copyTree(src, dst);
+    } else if (st.isFile()) {
+      copyFileSync(src, dst);
+    }
+  }
+}
 
-const dossier = buildDossier(outDir, {
-  text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
-  game_max_files: 993,
-  game_max_bytes: 50331648,
-});
-writeFileSync(join(outDir, 'dossier.json'), dossier);
-console.log('Porto Verde: wrote dossier.json (' + dossier.length + ' bytes) to ' + outDir);
+function main(): void {
+  const gameSrc = join(REPO_DIR, 'game');
+  const shotsSrc = join(REPO_DIR, 'screenshots');
+  mkdirSync(OUT_DIR, { recursive: true });
+  copyTree(gameSrc, join(OUT_DIR, 'game'));
+  if (existsSync(shotsSrc)) {
+    copyTree(shotsSrc, join(OUT_DIR, 'screenshots'));
+  } else {
+    mkdirSync(join(OUT_DIR, 'screenshots'), { recursive: true });
+  }
+  const dossier = buildDossier(OUT_DIR, {
+    text_max_bytes: 163840,
+    screenshots: { max: 4, max_bytes: 262144 },
+    game_max_files: 993,
+    game_max_bytes: 50331648,
+  });
+  writeFileSync(join(OUT_DIR, 'dossier.json'), dossier);
+  console.log('Dusthaven dossier written: ' + join(OUT_DIR, 'dossier.json'));
+}
+
+main();

@@ -1,86 +1,144 @@
-// pedestrians.js — sidewalk walkers who flee from chaos in Porto Verde.
+// Dusthaven — pedestrians.js
+// The people of Dusthaven: walkers on the sidewalks who stroll, chat
+// and cross the street — and who run for cover when guns come out or
+// a car mounts the kerb.
+var DH = window.DH || (window.DH = {});
 
-const PED_COLORS = [0xe8b04b, 0x4b8fe8, 0xe84b6a, 0x6ae84b, 0xb04be8, 0xe8e0d0, 0x3a3f45, 0xd8702e];
+DH.pedestrians = (function () {
+  'use strict';
 
-function buildPedMesh(color) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 1.0, 8), new THREE.MeshLambertMaterial({ color }));
-  body.position.y = 0.95; body.castShadow = true;
-  g.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), new THREE.MeshLambertMaterial({ color: 0xe8b88a }));
-  head.position.y = 1.68;
-  g.add(head);
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.3), new THREE.MeshLambertMaterial({ color: 0x2c2f36 }));
-  legs.position.y = 0.25;
-  g.add(legs);
-  return g;
-}
+  var U = DH.util;
+  var SHIRTS = [0x4a7ab0, 0xb04a6a, 0x5a9a4a, 0xd8c25a, 0x7a5ab0, 0xc0c0c0, 0x3a8a8a];
+  var SKINS = [0xd9a077, 0xb07a4a, 0x8a5a3a, 0xe8b890];
 
-function spawnPedestrians(n) {
-  for (let i = 0; i < n; i++) {
-    const x = rand(-280, 280), z = rand(-280, 280);
-    const mesh = buildPedMesh(pick(PED_COLORS));
-    mesh.position.set(x, 0, z);
-    V.scene.add(mesh);
-    V.peds.push({
-      mesh, x, z, heading: rand(0, Math.PI * 2),
-      speed: rand(1.2, 2.2), targetX: x, targetZ: z,
-      panic: 0, walkPhase: rand(0, 6),
-    });
+  function makePedMesh(shirt, skin) {
+    var group = new THREE.Group();
+    var torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.32),
+      new THREE.MeshLambertMaterial({ color: shirt }));
+    torso.position.y = 1.05;
+    torso.castShadow = true;
+    group.add(torso);
+    var head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8),
+      new THREE.MeshLambertMaterial({ color: skin }));
+    head.position.y = 1.62;
+    group.add(head);
+    var legMat = new THREE.MeshLambertMaterial({ color: 0x2e3448 });
+    var legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.68, 0.22), legMat);
+    legL.position.set(-0.14, 0.34, 0);
+    group.add(legL);
+    var legR = legL.clone();
+    legR.position.x = 0.14;
+    group.add(legR);
+    group.userData.legL = legL;
+    group.userData.legR = legR;
+    return group;
   }
-}
 
-function pickPedTarget(ped) {
-  // A new sidewalk waypoint: just off a street, inside a block edge.
-  const street = pick(CITY.streets);
-  const along = rand(-280, 280);
-  if (rng() < 0.5) { ped.targetX = along; ped.targetZ = street + pick([-11, 11]); }
-  else { ped.targetX = street + pick([-11, 11]); ped.targetZ = along; }
-}
+  function spawnPedestrians(G, count) {
+    var list = [];
+    var streets = DH.city.STREETS;
+    for (var i = 0; i < count; i++) {
+      var s = streets[Math.floor(Math.random() * streets.length)];
+      var t = U.rand(-240, 240);
+      var alongRoad = Math.random() < 0.5;
+      var x = alongRoad ? s + U.pick([-9.5, 9.5]) : t;
+      var z = alongRoad ? t : s + U.pick([-9.5, 9.5]);
+      var mesh = makePedMesh(U.pick(SHIRTS), U.pick(SKINS));
+      mesh.position.set(x, 0, z);
+      G.scene.add(mesh);
+      list.push({
+        mesh: mesh,
+        pos: mesh.position,
+        heading: Math.random() * Math.PI * 2,
+        speed: U.rand(1.2, 2.4),
+        state: 'walk',
+        fleeTimer: 0,
+        walkPhase: Math.random() * 6,
+        panic: 0
+      });
+    }
+    return list;
+  }
 
-function updatePedestrians(dt) {
-  const px = V.player ? V.player.x : 0, pz = V.player ? V.player.z : 0;
-  const chaos = V.wanted > 0 || (V.activeCar && Math.abs(V.activeCar.speed) > 20);
-  for (const ped of V.peds) {
-    // Panic: gunfire, sirens or a speeding car nearby.
-    const nearPlayer = dist2d(ped.x, ped.z, px, pz);
-    if (nearPlayer < 14 && (chaos || V.playerFired)) ped.panic = 3;
-    if (V.playerFired && nearPlayer < 30) ped.panic = Math.max(ped.panic, 1.5);
-    let speed = ped.speed;
-    let tx = ped.targetX, tz = ped.targetZ;
-    if (ped.panic > 0) {
-      ped.panic -= dt;
-      speed = 5.5;
-      tx = ped.x + (ped.x - px); tz = ped.z + (ped.z - pz); // run away
+  function nearestDanger(G, ped) {
+    var p = G.player;
+    var d = U.dist2D(ped.pos.x, ped.pos.z, p.pos.x, p.pos.z);
+    var gunOut = p.weapon === 'pistol' && !p.inCar;
+    var chaos = G.wanted > 0 || gunOut || G.lastShotAt > G.time - 2;
+    if (d < 14 && chaos) return { x: p.pos.x, z: p.pos.z, d: d };
+    var cars = G.allCars || [];
+    for (var i = 0; i < cars.length; i++) {
+      var c = cars[i];
+      if (c.dead) continue;
+      var cd = U.dist2D(ped.pos.x, ped.pos.z, c.pos.x, c.pos.z);
+      if (cd < 6 && Math.abs(c.speed || 0) > 8) return { x: c.pos.x, z: c.pos.z, d: cd };
     }
-    const dx = tx - ped.x, dz = tz - ped.z;
-    const d = Math.sqrt(dx * dx + dz * dz);
-    if (d < 2) { pickPedTarget(ped); continue; }
-    const wantHeading = Math.atan2(dx, dz);
-    ped.heading = angleLerp(ped.heading, wantHeading, dt * 5);
-    const nx = ped.x + Math.sin(ped.heading) * speed * dt;
-    const nz = ped.z + Math.cos(ped.heading) * speed * dt;
-    if (!hitsCollider(nx, nz, 0.6) && Math.abs(nx) < CITY.half + 10 && Math.abs(nz) < CITY.half + 10) {
-      ped.x = nx; ped.z = nz;
-    } else {
-      pickPedTarget(ped);
-    }
-    // Run over by a car?
-    if (V.activeCar && dist2d(ped.x, ped.z, V.activeCar.x, V.activeCar.z) < 2.2 && Math.abs(V.activeCar.speed) > 4) {
-      ped.mesh.visible = false;
-      ped.dead = true;
-      spawnBlood(ped.x, ped.z);
-      addWanted(1, 'hit a pedestrian');
-      V.kills++;
-      sfxHit();
-    }
-    ped.walkPhase += dt * speed * 2.2;
-    ped.mesh.position.set(ped.x, Math.abs(Math.sin(ped.walkPhase)) * 0.06, ped.z);
-    ped.mesh.rotation.y = ped.heading;
+    return null;
   }
-  // Remove the dead and keep the crowd topped up.
-  for (let i = V.peds.length - 1; i >= 0; i--) {
-    if (V.peds[i].dead) { V.scene.remove(V.peds[i].mesh); V.peds.splice(i, 1); }
+
+  function updatePeds(G, dt) {
+    var list = G.peds || [];
+    for (var i = 0; i < list.length; i++) {
+      var ped = list[i];
+      var danger = nearestDanger(G, ped);
+      if (danger) {
+        ped.state = 'flee';
+        ped.fleeTimer = 1.2;
+        ped.panic = 1;
+      } else if (ped.fleeTimer > 0) {
+        ped.fleeTimer -= dt;
+        if (ped.fleeTimer <= 0) ped.state = 'walk';
+      }
+      var speed = ped.state === 'flee' ? 7 : ped.speed;
+      if (ped.state === 'flee' && danger) {
+        var away = Math.atan2(ped.pos.x - danger.x, ped.pos.z - danger.z);
+        ped.heading = U.angleLerp(ped.heading, away, U.clamp(dt * 6, 0, 1));
+      } else {
+        // Amble along the sidewalk; turn at intersections sometimes.
+        var nearX = DH.city.nearestStreetCoord(ped.pos.x);
+        var nearZ = DH.city.nearestStreetCoord(ped.pos.z);
+        if (Math.abs(ped.pos.x - nearX) < 10.5 && Math.abs(ped.pos.z - nearZ) < 10.5 &&
+            Math.random() < dt * 0.25) {
+          ped.heading = U.pick([0, Math.PI / 2, Math.PI, -Math.PI / 2]);
+        }
+      }
+      ped.pos.x += Math.sin(ped.heading) * speed * dt;
+      ped.pos.z += Math.cos(ped.heading) * speed * dt;
+      DH.city.resolveCollisions(G, ped.pos, 0.5);
+      ped.pos.x = U.clamp(ped.pos.x, -270, 270);
+      ped.pos.z = U.clamp(ped.pos.z, -270, 270);
+      ped.walkPhase += dt * speed * 2.2;
+      var swing = Math.sin(ped.walkPhase) * (ped.state === 'flee' ? 0.9 : 0.45);
+      ped.mesh.userData.legL.rotation.x = swing;
+      ped.mesh.userData.legR.rotation.x = -swing;
+      ped.mesh.rotation.y = ped.heading;
+      // A car that hits a pedestrian at speed is a crime — and a tragedy.
+      var cars = G.allCars || [];
+      for (var j = 0; j < cars.length; j++) {
+        var c = cars[j];
+        if (c.dead) continue;
+        var d = U.dist2D(ped.pos.x, ped.pos.z, c.pos.x, c.pos.z);
+        if (d < 2.2 && Math.abs(c.speed || 0) > 4) {
+          DH.effects.blood(ped.pos);
+          DH.effects.burst(ped.pos, 0xcc3333, 6, 3, 0.5, 6);
+          if (c.isPlayer) {
+            DH.police.addWanted(G, 2);
+            DH.hud.showBanner('PEDESTRIAN HIT', 'Witnesses called it in — wanted up');
+            DH.audio.crash();
+          }
+          // The pedestrian is knocked clear and scrambles away.
+          ped.pos.x += (ped.pos.x - c.pos.x) * 0.8;
+          ped.pos.z += (ped.pos.z - c.pos.z) * 0.8;
+          ped.state = 'flee';
+          ped.fleeTimer = 3;
+          c.speed *= 0.7;
+        }
+      }
+    }
   }
-  if (V.peds.length < 22 && rng() < dt * 0.5) spawnPedestrians(1);
-}
+
+  return {
+    spawnPedestrians: spawnPedestrians,
+    updatePeds: updatePeds
+  };
+})();

@@ -1,43 +1,79 @@
-// save.js — localStorage persistence for Porto Verde.
+// Dusthaven — save.js
+// Progress persistence in localStorage: money, story progress,
+// collected sun coins and the best stunt. Nothing else is stored,
+// and a corrupt or missing save simply starts a fresh game.
+var DH = window.DH || (window.DH = {});
 
-const SAVE_KEY = 'porto-verde-save-v1';
+DH.save = (function () {
+  'use strict';
 
-function saveGame() {
-  try {
-    const data = {
-      money: V.money,
-      health: V.health,
-      missionsDone: V.missionsDone.slice(),
-      collectibles: V.collectibles,
-      kills: V.kills,
-      carsStolen: V.carsStolen,
-      px: V.player ? V.player.x : 0,
-      pz: V.player ? V.player.z : 0,
-      savedAt: Date.now(),
+  var KEY = 'dusthaven-save-v1';
+
+  function defaultSave() {
+    return {
+      money: 250,
+      missionIndex: 0,
+      missionsDone: [],
+      coins: [],
+      bestStunt: 0,
+      carsStolen: 0,
+      playSeconds: 0
     };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-    return true;
-  } catch (err) { return false; }
-}
+  }
 
-function loadSave() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const d = JSON.parse(raw);
-    if (typeof d.money !== 'number' || !Array.isArray(d.missionsDone)) return null;
-    return d;
-  } catch (err) { return null; }
-}
+  function saveGame(G) {
+    try {
+      var data = {
+        money: Math.floor(G.money),
+        missionIndex: G.missionIndex,
+        missionsDone: G.missionsDone.slice(),
+        coins: G.coinsCollected.slice(),
+        bestStunt: G.bestStunt || 0,
+        carsStolen: G.carsStolen || 0,
+        playSeconds: Math.floor(G.playSeconds || 0)
+      };
+      window.localStorage.setItem(KEY, JSON.stringify(data));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 
-function applySave(d) {
-  V.money = d.money;
-  V.health = 100;
-  V.missionsDone = d.missionsDone.slice();
-  V.collectibles = d.collectibles || 0;
-  V.kills = d.kills || 0;
-  V.carsStolen = d.carsStolen || 0;
-  if (V.player && typeof d.px === 'number') { V.player.x = d.px; V.player.z = d.pz; }
-}
+  function loadGame() {
+    try {
+      var raw = window.localStorage.getItem(KEY);
+      if (!raw) return null;
+      var data = JSON.parse(raw);
+      if (!data || typeof data.money !== 'number') return null;
+      var out = defaultSave();
+      out.money = data.money;
+      out.missionIndex = Math.max(0, Math.min(data.missionIndex | 0, 5));
+      out.missionsDone = Array.isArray(data.missionsDone) ? data.missionsDone : [];
+      out.coins = Array.isArray(data.coins) ? data.coins : [];
+      out.bestStunt = data.bestStunt | 0;
+      out.carsStolen = data.carsStolen | 0;
+      out.playSeconds = data.playSeconds | 0;
+      return out;
+    } catch (e) {
+      return null;
+    }
+  }
 
-function hasSave() { return loadSave() !== null; }
+  function hasSave() {
+    return loadGame() !== null;
+  }
+
+  function clearSave() {
+    try {
+      window.localStorage.removeItem(KEY);
+    } catch (e) { /* storage unavailable: a fresh game either way */ }
+  }
+
+  return {
+    saveGame: saveGame,
+    loadGame: loadGame,
+    hasSave: hasSave,
+    clearSave: clearSave,
+    defaultSave: defaultSave
+  };
+})();

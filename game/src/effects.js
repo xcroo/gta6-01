@@ -1,98 +1,186 @@
-// effects.js — particles, skid marks, flashes and explosions for Porto Verde.
+// Dusthaven — effects.js
+// Juice: particle bursts, tyre skid marks, muzzle flashes, explosions
+// and camera shake. Everything here is pooled and recycled so the
+// frame rate stays steady even during a big chase pile-up.
+var DH = window.DH || (window.DH = {});
 
-const FX = {
-  particles: [],
-  skids: [],
-  maxParticles: 400,
-};
+DH.effects = (function () {
+  'use strict';
 
-function initEffects(scene) {
-  V.effects = FX;
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FX.maxParticles * 3), 3));
-  const mat = new THREE.PointsMaterial({ color: 0xffcc66, size: 0.5, transparent: true, opacity: 0.95 });
-  FX.points = new THREE.Points(geo, mat);
-  FX.points.frustumCulled = false;
-  scene.add(FX.points);
-  for (let i = 0; i < FX.maxParticles; i++) {
-    FX.particles.push({ life: 0, x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0 });
+  var particles = [];
+  var skids = [];
+  var flashLight = null;
+  var flashTime = 0;
+  var shakeAmount = 0;
+  var poolSize = 120;
+  var skidPool = 90;
+  var geo = null;
+  var mat = null;
+
+  function init(G) {
+    geo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
+    mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    for (var i = 0; i < poolSize; i++) {
+      var m = new THREE.Mesh(geo, mat.clone());
+      m.visible = false;
+      G.scene.add(m);
+      particles.push({ mesh: m, vel: new THREE.Vector3(), life: 0, max: 1, grav: 0 });
+    }
+    var skidGeo = new THREE.PlaneGeometry(0.55, 1.6);
+    var skidMat = new THREE.MeshBasicMaterial({
+      color: 0x1a1210, transparent: true, opacity: 0.55, depthWrite: false
+    });
+    for (var j = 0; j < skidPool; j++) {
+      var s = new THREE.Mesh(skidGeo, skidMat.clone());
+      s.rotation.x = -Math.PI / 2;
+      s.position.y = 0.06;
+      s.visible = false;
+      G.scene.add(s);
+      skids.push({ mesh: s, life: 0 });
+    }
+    flashLight = new THREE.PointLight(0xffcc66, 0, 26);
+    G.scene.add(flashLight);
   }
-}
 
-function spawnParticle(x, y, z, vx, vy, vz, life) {
-  for (const p of FX.particles) {
-    if (p.life <= 0) {
-      p.life = life; p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
+  function spawnParticle(pos, vel, color, life, grav) {
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      if (p.life > 0) continue;
+      p.mesh.visible = true;
+      p.mesh.position.copy(pos);
+      p.mesh.material.color.setHex(color);
+      p.mesh.scale.setScalar(1);
+      p.vel.copy(vel);
+      p.life = life;
+      p.max = life;
+      p.grav = grav || 0;
       return;
     }
   }
-}
 
-function spawnCrashSparks(x, z) {
-  for (let i = 0; i < 14; i++) {
-    spawnParticle(x, 0.8, z, rand(-6, 6), rand(1, 7), rand(-6, 6), rand(0.3, 0.8));
-  }
-}
-
-function spawnSmoke(x, z) {
-  spawnParticle(x + rand(-1, 1), 0.4, z + rand(-1, 1), rand(-1, 1), rand(1, 2.5), rand(-1, 1), rand(0.5, 1));
-}
-
-function spawnBlood(x, z) {
-  for (let i = 0; i < 10; i++) spawnParticle(x, 0.3, z, rand(-4, 4), rand(0.5, 3), rand(-4, 4), rand(0.3, 0.7));
-}
-
-function spawnExplosion(x, z) {
-  for (let i = 0; i < 40; i++) {
-    spawnParticle(x, rand(0.5, 2), z, rand(-12, 12), rand(2, 14), rand(-12, 12), rand(0.5, 1.2));
-  }
-  const flash = new THREE.PointLight(0xff7722, 4, 30);
-  flash.position.set(x, 3, z);
-  V.scene.add(flash);
-  setTimeout(() => V.scene.remove(flash), 300);
-  sfxCrash();
-}
-
-function spawnMuzzleFlash(x, y, z, heading) {
-  const flash = new THREE.PointLight(0xffdd88, 3, 12);
-  flash.position.set(x + Math.sin(heading) * 1.2, y, z + Math.cos(heading) * 1.2);
-  V.scene.add(flash);
-  setTimeout(() => V.scene.remove(flash), 70);
-  for (let i = 0; i < 6; i++) {
-    spawnParticle(flash.position.x, y, flash.position.z, Math.sin(heading) * rand(6, 12) + rand(-2, 2), rand(-1, 2), Math.cos(heading) * rand(6, 12) + rand(-2, 2), 0.15);
-  }
-}
-
-function addSkid(x, z, heading) {
-  if (FX.skids.length > 60) {
-    const old = FX.skids.shift();
-    V.scene.remove(old);
-  }
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.5, 1.6),
-    new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.55 })
-  );
-  m.rotation.x = -Math.PI / 2;
-  m.rotation.z = heading;
-  m.position.set(x, 0.05, z);
-  V.scene.add(m);
-  FX.skids.push(m);
-  setTimeout(() => { const i = FX.skids.indexOf(m); if (i >= 0) { FX.skids.splice(i, 1); V.scene.remove(m); } }, 9000);
-}
-
-function updateEffects(dt) {
-  const pos = FX.points.geometry.attributes.position.array;
-  for (let i = 0; i < FX.particles.length; i++) {
-    const p = FX.particles[i];
-    if (p.life > 0) {
-      p.life -= dt;
-      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-      p.vy -= 9 * dt;
-      if (p.y < 0.05) { p.y = 0.05; p.vy = 0; }
-    } else {
-      p.y = -99;
+  // A short burst of debris / sparks / smoke at a point.
+  function burst(pos, color, count, speed, life, grav) {
+    for (var i = 0; i < count; i++) {
+      var a = Math.random() * Math.PI * 2;
+      var up = Math.random() * 0.9 + 0.2;
+      var v = new THREE.Vector3(
+        Math.cos(a) * speed * Math.random(),
+        up * speed * 0.7,
+        Math.sin(a) * speed * Math.random()
+      );
+      spawnParticle(pos, v, color, life * (0.5 + Math.random() * 0.5), grav);
     }
-    pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
   }
-  FX.points.geometry.attributes.position.needsUpdate = true;
-}
+
+  function dust(pos) {
+    burst(pos, 0xc9a06a, 3, 2.2, 0.7, -0.5);
+  }
+
+  function sparks(pos) {
+    burst(pos, 0xffd27a, 8, 7, 0.4, 9);
+  }
+
+  function blood(pos) {
+    burst(pos, 0x8c1f1f, 6, 3, 0.5, 6);
+  }
+
+  function explosion(pos) {
+    burst(pos, 0xff7722, 26, 11, 0.9, 4);
+    burst(pos, 0x332211, 18, 5, 1.4, -1);
+    burst(pos, 0xffcc55, 12, 7, 0.5, 2);
+    flashLight.position.copy(pos);
+    flashLight.position.y += 2;
+    flashLight.intensity = 5;
+    flashTime = 0.22;
+    shake(0.9);
+  }
+
+  // A muzzle flash: a brief warm light at the barrel, plus sparks.
+  function muzzle(pos, dir) {
+    flashLight.position.copy(pos);
+    flashLight.intensity = 3.2;
+    flashTime = 0.07;
+    var tip = pos.clone().add(dir.clone().multiplyScalar(0.8));
+    burst(tip, 0xffe08a, 4, 5, 0.18, 0);
+  }
+
+  // One skid segment under a wheel; fades away after a few seconds.
+  function skid(x, z, heading) {
+    for (var i = 0; i < skids.length; i++) {
+      var s = skids[i];
+      if (s.life > 0) continue;
+      s.mesh.visible = true;
+      s.mesh.position.set(x, 0.06, z);
+      s.mesh.rotation.z = -heading;
+      s.mesh.material.opacity = 0.55;
+      s.life = 5;
+      return;
+    }
+    // Pool full: recycle the oldest mark.
+    var old = skids[0];
+    old.mesh.position.set(x, 0.06, z);
+    old.mesh.rotation.z = -heading;
+    old.mesh.material.opacity = 0.55;
+    old.mesh.visible = true;
+    old.life = 5;
+  }
+
+  function shake(amount) {
+    shakeAmount = Math.max(shakeAmount, amount);
+  }
+
+  function shakeOffset() {
+    if (shakeAmount <= 0.001) return { x: 0, y: 0 };
+    var s = shakeAmount;
+    return {
+      x: (Math.random() - 0.5) * s * 0.6,
+      y: (Math.random() - 0.5) * s * 0.6
+    };
+  }
+
+  function update(dt) {
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      if (p.life <= 0) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.mesh.visible = false;
+        continue;
+      }
+      p.vel.y -= p.grav * dt;
+      p.mesh.position.addScaledVector(p.vel, dt);
+      var k = p.life / p.max;
+      p.mesh.scale.setScalar(0.4 + k * 0.8);
+      if (p.mesh.position.y < 0.05) {
+        p.mesh.position.y = 0.05;
+        p.vel.y = 0;
+      }
+    }
+    for (var j = 0; j < skids.length; j++) {
+      var s = skids[j];
+      if (s.life <= 0) continue;
+      s.life -= dt;
+      s.mesh.material.opacity = Math.max(0, 0.55 * (s.life / 5));
+      if (s.life <= 0) s.mesh.visible = false;
+    }
+    if (flashTime > 0) {
+      flashTime -= dt;
+      if (flashTime <= 0) flashLight.intensity = 0;
+    }
+    shakeAmount = Math.max(0, shakeAmount - dt * 2.2);
+  }
+
+  return {
+    init: init,
+    burst: burst,
+    dust: dust,
+    sparks: sparks,
+    blood: blood,
+    explosion: explosion,
+    muzzle: muzzle,
+    skid: skid,
+    shake: shake,
+    shakeOffset: shakeOffset,
+    update: update
+  };
+})();
