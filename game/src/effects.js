@@ -1,92 +1,98 @@
-// SOLMARA — effects.js
-// Particles and flashes: muzzle smoke, tyre smoke, impacts, explosions
-// and the screen shake that sells them. All geometry is pooled so the
-// frame rate stays steady during a chase.
+// effects.js — particles, skid marks, flashes and explosions for Porto Verde.
 
-var Effects = {
-  pool: [], shake: 0, flash: 0,
-
-  init: function (scene) {
-    var geo = new THREE.BoxGeometry(0.22, 0.22, 0.22);
-    for (var i = 0; i < 160; i++) {
-      var m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: 0xffffff, transparent: true, opacity: 0,
-      }));
-      m.visible = false;
-      scene.add(m);
-      this.pool.push({ mesh: m, life: 0, maxLife: 1, vx: 0, vy: 0, vz: 0, grav: 0 });
-    }
-  },
-
-  // Hide every live particle (new game, busted respawn).
-  clear: function () {
-    for (var i = 0; i < this.pool.length; i++) {
-      var p = this.pool[i];
-      p.life = 0; p.mesh.visible = false;
-    }
-    this.shake = 0; this.flash = 0;
-  },
-
-  spawn: function (x, y, z, color, n, speed, life, grav, size) {
-    var made = 0;
-    for (var i = 0; i < this.pool.length && made < n; i++) {
-      var p = this.pool[i];
-      if (p.life > 0) continue;
-      p.life = p.maxLife = life * rr(0.6, 1.3);
-      p.mesh.visible = true;
-      p.mesh.material.color.setHex(color);
-      p.mesh.material.opacity = 0.95;
-      p.mesh.position.set(x + rr(-0.3, 0.3), y + rr(-0.2, 0.3), z + rr(-0.3, 0.3));
-      var s = (size || 1) * rr(0.7, 1.4);
-      p.mesh.scale.set(s, s, s);
-      var a = rr(0, Math.PI * 2), b = rr(-0.5, 1);
-      p.vx = Math.cos(a) * speed * rr(0.4, 1);
-      p.vy = b * speed;
-      p.vz = Math.sin(a) * speed * rr(0.4, 1);
-      p.grav = grav;
-      made++;
-    }
-  },
-
-  smoke: function (x, z) {
-    this.spawn(x + rr(-0.8, 0.8), 0.4, z + rr(-0.8, 0.8), 0xbbbbbb, 2, 1.2, 0.9, 1.5, 1.6);
-  },
-  impact: function (x, z) {
-    this.spawn(x, 1, z, 0xffcc66, 10, 5, 0.5, 6, 1);
-    this.spawn(x, 1, z, 0x888888, 6, 2.5, 0.8, 2, 1.8);
-    this.shake = Math.max(this.shake, 0.35);
-  },
-  muzzle: function (x, y, z) {
-    this.spawn(x, y, z, 0xffdd55, 3, 2, 0.12, 0, 1.2);
-    this.flash = 0.09;
-  },
-  explosion: function (x, y, z) {
-    this.spawn(x, y, z, 0xff7722, 26, 9, 0.9, 4, 2.2);
-    this.spawn(x, y + 1, z, 0x333333, 14, 4, 1.4, 1, 2.6);
-    this.spawn(x, y, z, 0xffdd44, 10, 12, 0.4, 2, 1.4);
-    this.shake = Math.max(this.shake, 0.8);
-    this.flash = 0.18;
-    AudioSys.burst(120, 0.7, 0.7, 'lowpass');
-  },
-  blood: function (x, y, z) {
-    this.spawn(x, y, z, 0xaa1111, 8, 3, 0.5, 8, 0.8);
-  },
-
-  update: function (dt) {
-    for (var i = 0; i < this.pool.length; i++) {
-      var p = this.pool[i];
-      if (p.life <= 0) continue;
-      p.life -= dt;
-      if (p.life <= 0) { p.mesh.visible = false; continue; }
-      p.vy -= p.grav * dt;
-      p.mesh.position.x += p.vx * dt;
-      p.mesh.position.y += p.vy * dt;
-      p.mesh.position.z += p.vz * dt;
-      if (p.mesh.position.y < 0.1) p.mesh.position.y = 0.1;
-      p.mesh.material.opacity = 0.95 * (p.life / p.maxLife);
-      p.mesh.rotation.x += dt * 3; p.mesh.rotation.y += dt * 2;
-    }
-    this.shake = Math.max(0, this.shake - dt * 1.4);
-    this.flash = Math.max(0, this.flash - dt);
-  },
+const FX = {
+  particles: [],
+  skids: [],
+  maxParticles: 400,
 };
+
+function initEffects(scene) {
+  V.effects = FX;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(FX.maxParticles * 3), 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffcc66, size: 0.5, transparent: true, opacity: 0.95 });
+  FX.points = new THREE.Points(geo, mat);
+  FX.points.frustumCulled = false;
+  scene.add(FX.points);
+  for (let i = 0; i < FX.maxParticles; i++) {
+    FX.particles.push({ life: 0, x: 0, y: -99, z: 0, vx: 0, vy: 0, vz: 0 });
+  }
+}
+
+function spawnParticle(x, y, z, vx, vy, vz, life) {
+  for (const p of FX.particles) {
+    if (p.life <= 0) {
+      p.life = life; p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz;
+      return;
+    }
+  }
+}
+
+function spawnCrashSparks(x, z) {
+  for (let i = 0; i < 14; i++) {
+    spawnParticle(x, 0.8, z, rand(-6, 6), rand(1, 7), rand(-6, 6), rand(0.3, 0.8));
+  }
+}
+
+function spawnSmoke(x, z) {
+  spawnParticle(x + rand(-1, 1), 0.4, z + rand(-1, 1), rand(-1, 1), rand(1, 2.5), rand(-1, 1), rand(0.5, 1));
+}
+
+function spawnBlood(x, z) {
+  for (let i = 0; i < 10; i++) spawnParticle(x, 0.3, z, rand(-4, 4), rand(0.5, 3), rand(-4, 4), rand(0.3, 0.7));
+}
+
+function spawnExplosion(x, z) {
+  for (let i = 0; i < 40; i++) {
+    spawnParticle(x, rand(0.5, 2), z, rand(-12, 12), rand(2, 14), rand(-12, 12), rand(0.5, 1.2));
+  }
+  const flash = new THREE.PointLight(0xff7722, 4, 30);
+  flash.position.set(x, 3, z);
+  V.scene.add(flash);
+  setTimeout(() => V.scene.remove(flash), 300);
+  sfxCrash();
+}
+
+function spawnMuzzleFlash(x, y, z, heading) {
+  const flash = new THREE.PointLight(0xffdd88, 3, 12);
+  flash.position.set(x + Math.sin(heading) * 1.2, y, z + Math.cos(heading) * 1.2);
+  V.scene.add(flash);
+  setTimeout(() => V.scene.remove(flash), 70);
+  for (let i = 0; i < 6; i++) {
+    spawnParticle(flash.position.x, y, flash.position.z, Math.sin(heading) * rand(6, 12) + rand(-2, 2), rand(-1, 2), Math.cos(heading) * rand(6, 12) + rand(-2, 2), 0.15);
+  }
+}
+
+function addSkid(x, z, heading) {
+  if (FX.skids.length > 60) {
+    const old = FX.skids.shift();
+    V.scene.remove(old);
+  }
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5, 1.6),
+    new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.55 })
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.rotation.z = heading;
+  m.position.set(x, 0.05, z);
+  V.scene.add(m);
+  FX.skids.push(m);
+  setTimeout(() => { const i = FX.skids.indexOf(m); if (i >= 0) { FX.skids.splice(i, 1); V.scene.remove(m); } }, 9000);
+}
+
+function updateEffects(dt) {
+  const pos = FX.points.geometry.attributes.position.array;
+  for (let i = 0; i < FX.particles.length; i++) {
+    const p = FX.particles[i];
+    if (p.life > 0) {
+      p.life -= dt;
+      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+      p.vy -= 9 * dt;
+      if (p.y < 0.05) { p.y = 0.05; p.vy = 0; }
+    } else {
+      p.y = -99;
+    }
+    pos[i * 3] = p.x; pos[i * 3 + 1] = p.y; pos[i * 3 + 2] = p.z;
+  }
+  FX.points.geometry.attributes.position.needsUpdate = true;
+}

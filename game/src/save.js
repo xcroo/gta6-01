@@ -1,61 +1,43 @@
-// SOLMARA — save.js
-// Save and load through localStorage. Saves cash, health, ammo, the
-// next mission, the player's position and lifetime stats. A save is
-// only ever written from a clean state — never mid-mission data that
-// could strand the player.
+// save.js — localStorage persistence for Porto Verde.
 
-var SaveGame = {
-  save: function () {
-    try {
-      var data = {
-        v: 1,
-        cash: G.cash,
-        health: G.health,
-        ammo: G.ammo,
-        reserveAmmo: G.reserveAmmo,
-        missionIndex: G.missionIndex,
-        missionsDone: G.missionsDone,
-        freeRoam: G.freeRoam,
-        x: Player.x, z: Player.z, heading: Player.heading,
-        stats: G.stats,
-        savedAt: new Date().toISOString(),
-      };
-      localStorage.setItem(G.saveSlot, JSON.stringify(data));
-      return true;
-    } catch (e) { return false; }
-  },
+const SAVE_KEY = 'porto-verde-save-v1';
 
-  load: function () {
-    try {
-      var raw = localStorage.getItem(G.saveSlot);
-      if (!raw) return null;
-      var data = JSON.parse(raw);
-      if (!data || data.v !== 1) return null;
-      return data;
-    } catch (e) { return null; }
-  },
+function saveGame() {
+  try {
+    const data = {
+      money: V.money,
+      health: V.health,
+      missionsDone: V.missionsDone.slice(),
+      collectibles: V.collectibles,
+      kills: V.kills,
+      carsStolen: V.carsStolen,
+      px: V.player ? V.player.x : 0,
+      pz: V.player ? V.player.z : 0,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    return true;
+  } catch (err) { return false; }
+}
 
-  hasSave: function () { return this.load() !== null; },
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (typeof d.money !== 'number' || !Array.isArray(d.missionsDone)) return null;
+    return d;
+  } catch (err) { return null; }
+}
 
-  apply: function (data) {
-    G.cash = data.cash;
-    G.health = clamp(data.health, 1, G.maxHealth);
-    G.ammo = data.ammo;
-    G.reserveAmmo = data.reserveAmmo;
-    G.missionIndex = data.missionIndex;
-    G.missionsDone = data.missionsDone;
-    G.freeRoam = !!data.freeRoam;
-    G.stats = data.stats || G.stats;
-    Player.reset(data.x, data.z, data.heading || 0);
-    clearWanted();
-    if (G.freeRoam) {
-      HUD.setObjective('Free roam — press M to replay the jobs');
-    } else if (G.missionIndex < MISSIONS.length) {
-      HUD.setObjective('Press M to start: ' + MISSIONS[G.missionIndex].title);
-    }
-  },
+function applySave(d) {
+  V.money = d.money;
+  V.health = 100;
+  V.missionsDone = d.missionsDone.slice();
+  V.collectibles = d.collectibles || 0;
+  V.kills = d.kills || 0;
+  V.carsStolen = d.carsStolen || 0;
+  if (V.player && typeof d.px === 'number') { V.player.x = d.px; V.player.z = d.pz; }
+}
 
-  wipe: function () {
-    try { localStorage.removeItem(G.saveSlot); } catch (e) { /* ignore */ }
-  },
-};
+function hasSave() { return loadSave() !== null; }

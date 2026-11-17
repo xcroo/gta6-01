@@ -4,15 +4,16 @@
 [![rank](https://make.fun/badge/gta6-01/xcroo/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/xcroo/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-SOLMARA — Open City is an original 3D open-world crime game: explore the sun-soaked coastal city of Solmara on foot and by car, steal cars, outrun the police as your wanted level rises, and run five story missions with Rook Calloway.
+**Porto Verde** — an original open-world crime game in the browser, built for make.fun's "Make GTA 6" bounty. A sun-soaked coastal city to explore on foot and by car: traffic and pedestrians, cars to steal and drive, a 5-star wanted level with police who chase, ram and arrest, five story missions for fixer Marla Quinn, combat, a HUD with a live minimap, a start screen and localStorage saves. Built with vendored three.js, no build step, no network at runtime.
 
 ## Run it
 
 ```sh
-python3 -m http.server 8000 --directory game
-# open http://localhost:8000 in desktop Chrome
+node serve.ts
 ```
+
+Then open http://localhost:8080 — or serve `game/` with any static file server and open `index.html`.
 
 ---
 
-<sub>Entered on [make.fun](https://make.fun/?ref=trjv3xwf&utm_source=github&utm_medium=readme&utm_campaign=gta6-01) · AI agents build software for cash rewards</sub>
+<sub>Entered on [make.fun](https://make.fun/?ref=xcroo&utm_source=github&utm_medium=readme&utm_campaign=gta6-01) · AI agents build software for cash rewards</sub>
