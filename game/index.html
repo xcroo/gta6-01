@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLMARA — Open City</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0f16;
+    font-family: 'Segoe UI', Arial, Helvetica, sans-serif; color: #fff; }
+  #game-canvas { position: fixed; inset: 0; }
+  #game-canvas canvas { display: block; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 10; }
+  #top-left { position: absolute; top: 14px; left: 14px; }
+  #cash { font-size: 30px; font-weight: 800; color: #7dff9a; text-shadow: 0 2px 6px #000; letter-spacing: 1px; }
+  #stars { font-size: 26px; letter-spacing: 4px; text-shadow: 0 2px 6px #000; margin-top: 2px; }
+  #clock { font-size: 15px; color: #ffe9b0; text-shadow: 0 1px 4px #000; margin-top: 4px; }
+  #mission-timer { font-size: 20px; font-weight: 700; text-shadow: 0 1px 4px #000; }
+
+  #objective-bar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(8, 14, 22, 0.72); border-left: 4px solid #ffd21f; border-radius: 4px;
+    padding: 9px 16px; max-width: 560px; font-size: 15px; line-height: 1.35; }
+  #objective-bar .label { color: #ffd21f; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+
+  #minimap { position: absolute; top: 14px; right: 14px; width: 190px; height: 190px;
+    border: 2px solid rgba(255,255,255,0.55); border-radius: 50%;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.6); background: #0a1220; }
+
+  #bottom-right { position: absolute; right: 16px; bottom: 16px; text-align: right; }
+  #speed { font-size: 44px; font-weight: 800; text-shadow: 0 2px 8px #000; line-height: 1; }
+  #speed-unit { font-size: 13px; color: #dfe8f0; text-shadow: 0 1px 4px #000; }
+  #car-name { font-size: 14px; color: #ffd21f; text-shadow: 0 1px 4px #000; margin-top: 2px; }
+
+  #bottom-left { position: absolute; left: 16px; bottom: 16px; width: 240px; }
+  #health-row { display: flex; align-items: center; gap: 8px; }
+  #health-bar { flex: 1; height: 14px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.4); border-radius: 7px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #2ecc71; transition: width 0.2s; }
+  #health-num { font-size: 15px; font-weight: 700; text-shadow: 0 1px 4px #000; min-width: 26px; }
+  #ammo-row { margin-top: 6px; font-size: 16px; font-weight: 700; text-shadow: 0 1px 4px #000; }
+  #ammo-row span { color: #ffd21f; }
+  #hint { margin-top: 8px; font-size: 14px; color: #ffe9b0; text-shadow: 0 1px 4px #000; min-height: 18px; }
+
+  #toast { position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+    background: rgba(8, 14, 22, 0.8); padding: 10px 18px; border-radius: 6px;
+    font-size: 15px; opacity: 0; transition: opacity 0.4s; max-width: 640px; text-align: center; }
+
+  #banner { position: absolute; top: 34%; left: 50%; transform: translateX(-50%); text-align: center; display: none; }
+  #banner-title { font-size: 46px; font-weight: 900; letter-spacing: 3px; color: #ffd21f;
+    text-shadow: 0 3px 14px #000, 0 0 30px rgba(255,210,31,0.4); }
+  #banner-sub { font-size: 20px; margin-top: 6px; text-shadow: 0 2px 8px #000; }
+
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+    margin: -11px 0 0 -11px; display: none; }
+  #crosshair:before, #crosshair:after { content: ''; position: absolute; background: #fff;
+    box-shadow: 0 0 4px #000; }
+  #crosshair:before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair:after { top: 10px; left: 0; height: 2px; width: 22px; }
+
+  #damage-vignette { position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(200,0,0,0.55) 100%);
+    transition: opacity 0.35s; }
+  #flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: #fff; }
+
+  /* ---------- screens ---------- */
+  .screen { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center;
+    justify-content: center; flex-direction: column; text-align: center; }
+  #start-screen { background: linear-gradient(180deg, rgba(6,10,18,0.25) 0%, rgba(6,10,18,0.72) 78%); }
+  .game-title { font-size: 84px; font-weight: 900; letter-spacing: 10px; color: #ffd21f;
+    text-shadow: 0 4px 0 #b8860b, 0 8px 30px rgba(0,0,0,0.8); line-height: 1; }
+  .game-sub { font-size: 22px; letter-spacing: 6px; color: #fff; margin-top: 8px;
+    text-shadow: 0 2px 8px #000; }
+  .story { max-width: 620px; margin: 22px 0 8px; font-size: 16px; line-height: 1.55;
+    color: #e8eef4; text-shadow: 0 1px 4px #000; }
+  .btn { pointer-events: auto; cursor: pointer; border: none; border-radius: 6px;
+    padding: 13px 34px; font-size: 17px; font-weight: 700; letter-spacing: 1px;
+    background: #ffd21f; color: #1a1405; margin: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.5); }
+  .btn:hover { background: #ffe14d; transform: translateY(-1px); }
+  .btn.secondary { background: rgba(255,255,255,0.16); color: #fff; border: 1px solid rgba(255,255,255,0.5); }
+  .btn.secondary:hover { background: rgba(255,255,255,0.28); }
+  .controls-line { margin-top: 18px; font-size: 13.5px; color: #cfd8e2; line-height: 1.8;
+    text-shadow: 0 1px 4px #000; }
+  .controls-line b { color: #ffd21f; }
+  #howto-panel { display: none; background: rgba(6,10,18,0.92); border: 1px solid #ffd21f;
+    border-radius: 8px; padding: 20px 26px; margin-top: 18px; max-width: 560px; text-align: left;
+    font-size: 14.5px; line-height: 1.7; }
+  #howto-panel h3 { color: #ffd21f; margin-bottom: 8px; letter-spacing: 1px; }
+  #howto-panel b { color: #ffd21f; }
+
+  #pause-screen, #busted-screen { background: rgba(6,10,18,0.72); display: none; }
+  .screen-title { font-size: 56px; font-weight: 900; letter-spacing: 6px; text-shadow: 0 4px 20px #000; }
+  #busted-screen .screen-title { color: #ff4444; }
+  .screen-sub { font-size: 17px; margin: 14px 0 8px; color: #e8eef4; max-width: 520px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="game-canvas"></div>
+
+<!-- ================= HUD ================= -->
+<div id="hud">
+  <div id="top-left">
+    <div id="cash">$250</div>
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="clock">16:24</div>
+    <div id="mission-timer"></div>
+  </div>
+  <div id="objective-bar">
+    <div class="label">OBJECTIVE</div>
+    <div id="objective">Press M to start the first job</div>
+  </div>
+  <canvas id="minimap" width="190" height="190"></canvas>
+  <div id="bottom-right">
+    <div id="speed">0</div>
+    <div id="speed-unit">on foot</div>
+    <div id="car-name"></div>
+  </div>
+  <div id="bottom-left">
+    <div id="health-row">
+      <div id="health-bar"><div id="health-fill"></div></div>
+      <div id="health-num">100</div>
+    </div>
+    <div id="ammo-row">AMMO <span id="ammo">24</span> &nbsp;·&nbsp; <span id="reserve"></span></div>
+    <div id="hint"></div>
+  </div>
+  <div id="toast"></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="crosshair"></div>
+  <div id="damage-vignette"></div>
+  <div id="flash"></div>
+</div>
+
+<!-- ================= START SCREEN ================= -->
+<div id="start-screen" class="screen">
+  <div class="game-title">SOLMARA</div>
+  <div class="game-sub">O P E N &nbsp; C I T Y</div>
+  <div class="story">Rook Calloway came back to Solmara with a debt, a fast car and nothing to
+    lose. Run jobs for fixer Marta Ibarra, steal what you need, outrun the Solmara PD —
+    and own the sunset city, one street at a time.</div>
+  <div>
+    <button class="btn" id="btn-new">NEW GAME</button>
+    <button class="btn secondary" id="btn-continue" style="display:none">CONTINUE</button>
+    <button class="btn secondary" id="btn-howto">HOW TO PLAY</button>
+  </div>
+  <div id="howto-panel">
+    <h3>HOW TO PLAY</h3>
+    <b>W A S D</b> — move / drive &nbsp;·&nbsp; <b>Shift</b> — run<br>
+    <b>Mouse drag</b> — look around &nbsp;·&nbsp; <b>Wheel</b> — zoom camera<br>
+    <b>Click</b> — shoot &nbsp;·&nbsp; <b>R</b> — reload &nbsp;·&nbsp; <b>Space</b> — jump / handbrake<br>
+    <b>E</b> — steal / leave a car &nbsp;·&nbsp; <b>H</b> — horn &nbsp;·&nbsp; <b>M</b> — next job &nbsp;·&nbsp; <b>Esc</b> — pause<br>
+    Steal cars, finish Marta's five jobs, and watch the stars: the more heat you
+    make, the harder the Solmara PD comes after you. Grab green health kits and
+    yellow ammo crates on the street. Your progress saves automatically.<br>
+    <button class="btn secondary" id="btn-close-howto" style="margin:12px 0 0">GOT IT</button>
+  </div>
+  <div class="controls-line">
+    <b>WASD</b> move / drive &nbsp;·&nbsp; <b>E</b> steal car &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp;
+    <b>M</b> next job &nbsp;·&nbsp; <b>Esc</b> pause<br>
+    An original game. Solmara, Rook Calloway and Marta Ibarra are invented here — no part of any existing game.
+  </div>
+</div>
+
+<!-- ================= PAUSE ================= -->
+<div id="pause-screen" class="screen">
+  <div class="screen-title">PAUSED</div>
+  <div class="screen-sub">Solmara waits for no one — except right now.</div>
+  <div>
+    <button class="btn" id="btn-resume">RESUME</button>
+    <button class="btn secondary" id="btn-save-quit">SAVE &amp; QUIT TO MENU</button>
+    <button class="btn secondary" id="btn-quit-menu">QUIT WITHOUT SAVING</button>
+  </div>
+</div>
+
+<!-- ================= BUSTED ================= -->
+<div id="busted-screen" class="screen">
+  <div class="screen-title">BUSTED</div>
+  <div class="screen-sub" id="busted-reason">The Solmara PD caught up with you.</div>
+  <div><button class="btn" id="btn-busted">BACK ON THE STREETS</button></div>
+</div>
+
+<script src="vendor/three.min.js"></script>
+<script src="src/util.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/effects.js"></script>
+<script src="src/city.js"></script>
+<script src="src/player.js"></script>
+<script src="src/vehicles.js"></script>
+<script src="src/pedestrians.js"></script>
+<script src="src/police.js"></script>
+<script src="src/combat.js"></script>
+<script src="src/missions.js"></script>
+<script src="src/hud.js"></script>
+<script src="src/save.js"></script>
+<script src="src/input.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
